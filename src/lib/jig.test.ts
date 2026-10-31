@@ -79,6 +79,32 @@ describe('rendering', () => {
     expect(analyse(p, info).stats.usedPins).toBe(14);
   });
 
+  it('sits flat on the board with the chosen push-in, and adds clamp tabs', async () => {
+    const p = {
+      ...applyPreset(DEFAULT_PARAMS, preset('pads-1x4-2.54')),
+      preload: 1.2,
+      clamp_tab_side: 'left_right' as const,
+    };
+    expect(p.clamp_tab && p.sit_on_board).toBe(true);
+    const r = await renderScad(jigSource, toDefines(p));
+    expect(r.ok, r.logs.join('\n')).toBe(true);
+    const info = parseJigInfo(r.logs)!;
+    expect(info.tabs).toHaveLength(2);
+    const [left, right] = info.tabs;
+    expect(left[0]).toBeCloseTo(info.body.cx - info.body.x / 2 - p.clamp_tab_length);
+    expect(right[2]).toBeCloseTo(info.body.cx + info.body.x / 2 + p.clamp_tab_length);
+    const { stats, findings } = analyse(p, info);
+    expect(stats.tipBelow).toBeCloseTo(1.2);
+    expect(findings.filter((f) => f.severity !== 'info')).toEqual([]);
+  });
+
+  it('warns when a clamp tab is used without sitting on the board', async () => {
+    const p = { ...DEFAULT_PARAMS, clamp_tab: true, clamp_tab_hole_d: 3 };
+    const info = parseJigInfo((await renderScad(jigSource, toDefines(p))).logs)!;
+    const messages = analyse(p, info).findings.map((f) => f.message);
+    expect(messages.some((m) => m.includes('crush the pins'))).toBe(true);
+  });
+
   it('renders custom points, pegs and a flipped body', async () => {
     const p = {
       ...DEFAULT_PARAMS,

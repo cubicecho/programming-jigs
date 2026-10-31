@@ -31,9 +31,15 @@ export const PRESET_KEYS: ParamKey[] = [
   'pocket_y',
   'pocket_depth',
   'pegs',
+  'sit_on_board',
+  'clamp_tab',
 ];
 
+// Small header and test-pad jigs are easier to use clamped down.
+const CLAMPED: Partial<JigParams> = { sit_on_board: true, clamp_tab: true };
+
 const grid = (cols: number, rows: number, pitch: number, rowPitch = pitch): Partial<JigParams> => ({
+  ...CLAMPED,
   layout: 'grid',
   grid_cols: cols,
   grid_rows: rows,

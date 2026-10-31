@@ -14,7 +14,9 @@ import { decodeShare, encodeShare } from '@/lib/share';
 import { useJigRender } from '@/lib/use-jig-render';
 
 // Editing these doesn't stop a jig from being "the TYWE3S preset".
-const PRESET_IDENTITY_KEYS = PRESET_KEYS.filter((k) => k !== 'skip_pins' && k !== 'view_from_bottom');
+const PRESET_IDENTITY_KEYS = PRESET_KEYS.filter(
+  (k) => !['skip_pins', 'view_from_bottom', 'sit_on_board', 'clamp_tab'].includes(k),
+);
 
 function initialState() {
   const shared = decodeShare(window.location.hash);

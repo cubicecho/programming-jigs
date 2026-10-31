@@ -14,6 +14,10 @@ export interface JigInfo {
   pocket: { cx: number; cy: number; hx: number; hy: number };
   holeD: number;
   stopH: number;
+  /** Height of the stop ledge above the exit face (0 unless the jig sits on the board). */
+  standoff: number;
+  /** Clamp tab footprints as [x0, y0, x1, y1]. */
+  tabs: [number, number, number, number][];
 }
 
 function echoValue(logs: string[], tag: string): unknown {
@@ -28,13 +32,16 @@ export function parseJigInfo(logs: string[]): JigInfo | null {
     const pins = echoValue(logs, 'JIG_PINS') as number[][] | undefined;
     const body = echoValue(logs, 'JIG_BODY') as number[] | undefined;
     const hole = echoValue(logs, 'JIG_HOLE') as number[] | undefined;
-    if (!pins || !body || !hole) return null;
+    const tabs = echoValue(logs, 'JIG_TABS') as JigInfo['tabs'] | undefined;
+    if (!pins || !body || !hole || !tabs) return null;
     return {
       pins: pins.map(([num, x, y, used]) => ({ num, x, y, used: used === 1 })),
       body: { cx: body[0], cy: body[1], x: body[2], y: body[3], height: body[4] },
       holeD: hole[0],
       stopH: hole[1],
       pocket: { cx: hole[2], cy: hole[3], hx: hole[4], hy: hole[5] },
+      standoff: hole[6],
+      tabs,
     };
   } catch {
     return null;
@@ -82,8 +89,9 @@ export function analyse(p: JigParams, info: JigInfo): { stats: JigStats; finding
   }
   const minWall = minSpacing === null ? null : minSpacing - holeD;
   const stopH = p.pin_stop ? p.stop_len : 0;
-  const tipBelow = p.pin_stop ? p.pin_total_len - p.pin_barrel_len - stopH : null;
-  const tailAbove = p.pin_barrel_len - (p.body_height - stopH);
+  const seat = info.standoff + stopH;
+  const tipBelow = p.pin_stop ? p.pin_total_len - p.pin_barrel_len - seat : null;
+  const tailAbove = p.pin_barrel_len - (p.body_height - seat);
 
   const findings: Finding[] = [];
   const mm = (n: number) => `${Math.round(n * 100) / 100} mm`;
@@ -132,6 +140,40 @@ export function analyse(p: JigParams, info: JigInfo): { stats: JigStats; finding
       message:
         'No pin stop: set every pin to the same depth by hand (press the jig onto a flat surface) before gluing.',
     });
+  }
+  if (p.sit_on_board && !p.pin_stop) {
+    findings.push({
+      severity: 'warning',
+      message:
+        'Sitting flat on the board needs the pin stop, so the pins have something to push against. Turn on Pin stop.',
+    });
+  } else if (p.sit_on_board && info.standoff === 0 && tipBelow !== null && tipBelow > p.preload) {
+    findings.push({
+      severity: 'warning',
+      message: `The stop is already as low as it goes, so the pins get pushed in ${mm(tipBelow)} rather than ${mm(p.preload)}.`,
+    });
+  }
+  if (p.clamp_tab) {
+    if (!p.sit_on_board && tipBelow !== null && tipBelow > 0) {
+      findings.push({
+        severity: 'warning',
+        message: `The pin tips reach ${mm(tipBelow)} below the tab, so clamping the tab flat would crush the pins. Turn on Sit flat on the board.`,
+      });
+    }
+    const tabW = p.clamp_tab_width > 0 ? p.clamp_tab_width : Math.min(info.body.x, info.body.y);
+    if (p.clamp_tab_hole_d > 0 && p.clamp_tab_hole_d > Math.min(tabW, p.clamp_tab_length) - 2) {
+      findings.push({
+        severity: 'error',
+        message: 'The tab hole leaves less than 1 mm of tab around it. Make the hole smaller or the tab bigger.',
+      });
+    }
+    if (p.flip_for_printing) {
+      findings.push({
+        severity: 'info',
+        message:
+          'The clamp tab is level with the bottom face, so the jig prints best upright. Turn off Flip for printing.',
+      });
+    }
   }
   const inPocketCount = used.filter((pin) => inPocket(info, pin.x, pin.y)).length;
   if (inPocketCount > 0) {

@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { JigParams, Layout, Peg, Point } from '@/lib/jig-params';
+import type { JigParams, Layout, Peg, Point, TabSide } from '@/lib/jig-params';
 import { matchPin, POGO_PINS, pinParams } from '@/lib/pogo-pins';
 import { PRESETS, presetGroups } from '@/lib/presets';
 
@@ -298,6 +298,85 @@ export function ParamsPanel({
           checked={p.pin1_marker}
           onChange={(v) => set({ pin1_marker: v })}
         />
+      </Section>
+
+      <Section title="Clamping" defaultOpen={p.clamp_tab || p.sit_on_board}>
+        <SwitchField
+          label="Sit flat on the board"
+          hint="Raises the pin seats so the bottom face rests on the board, with the pins pushed in a set amount."
+          checked={p.sit_on_board}
+          onChange={(v) => set({ sit_on_board: v })}
+        />
+        {p.sit_on_board && (
+          <FieldGrid>
+            <NumberField
+              label="Pin push-in"
+              unit="mm"
+              min={0.1}
+              hint="Keep this under the pin's spring travel."
+              value={p.preload}
+              onChange={(v) => set({ preload: v })}
+            />
+          </FieldGrid>
+        )}
+        <SwitchField
+          label="Clamp tab"
+          hint="A flat tab off the body, level with the bottom, for a clip or clamp to hold the jig on the board."
+          checked={p.clamp_tab}
+          onChange={(v) => set({ clamp_tab: v })}
+        />
+        {p.clamp_tab && (
+          <>
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground">Tab side (top view)</Label>
+              <Select value={p.clamp_tab_side} onValueChange={(v) => set({ clamp_tab_side: v as TabSide })}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="right">Right</SelectItem>
+                  <SelectItem value="left">Left</SelectItem>
+                  <SelectItem value="top">Top</SelectItem>
+                  <SelectItem value="bottom">Bottom</SelectItem>
+                  <SelectItem value="left_right">Left and right</SelectItem>
+                  <SelectItem value="top_bottom">Top and bottom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <FieldGrid>
+              <NumberField
+                label="Tab length"
+                unit="mm"
+                step={0.5}
+                min={3}
+                value={p.clamp_tab_length}
+                onChange={(v) => set({ clamp_tab_length: v })}
+              />
+              <NumberField
+                label="Tab width (0 = body)"
+                unit="mm"
+                step={0.5}
+                min={0}
+                value={p.clamp_tab_width}
+                onChange={(v) => set({ clamp_tab_width: v })}
+              />
+              <NumberField
+                label="Tab thickness"
+                unit="mm"
+                min={1}
+                value={p.clamp_tab_thickness}
+                onChange={(v) => set({ clamp_tab_thickness: v })}
+              />
+              <NumberField
+                label="Screw hole (0 = none)"
+                unit="mm"
+                min={0}
+                value={p.clamp_tab_hole_d}
+                onChange={(v) => set({ clamp_tab_hole_d: v })}
+              />
+            </FieldGrid>
+          </>
+        )}
       </Section>
 
       <Section title="Hole fit" defaultOpen={false}>

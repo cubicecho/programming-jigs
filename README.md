@@ -29,6 +29,12 @@ Coordinates are a top view: pin 1 is top-left and numbering runs
 counter-clockwise. **Probe from the underside** mirrors the layout for
 through-hole parts probed from the back of the board.
 
+For hands-free programming, turn on **Sit flat on the board**. This raises the
+pin seats so the bottom face rests on the board, with the pins pushed in by a
+set amount. Then add a **Clamp tab** off any side (or two opposite sides). The
+tab is level with the bottom face, so a binder clip or small clamp holds the
+jig down. The header and test-pad presets turn both on.
+
 Printed holes come out undersized, so tune **Hole fit** for your printer. With
 P11 pins (1 mm barrel), 2 mm pitch and wider prints fine on FDM. Finer
 pitches (SOIC, QFP) need thinner pins, and the app flags them.

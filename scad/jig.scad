@@ -63,6 +63,12 @@ stop_hole_d = 0.8; // [0.2:0.01:3]
 // Chamfer at the top of each hole to guide pins in (mm)
 entry_chamfer = 0.3; // [0:0.05:1]
 
+/* [Board contact] */
+// Raise the pin seats so the bottom face sits flat on the board (needs the pin stop)
+sit_on_board = false;
+// How far the pins are pushed in when the jig sits flat; keep it under the pin's travel (mm)
+preload = 1.0; // [0.1:0.1:5]
+
 /* [Body] */
 // Height of the jig block (mm)
 body_height = 12; // [2:0.5:40]
@@ -90,6 +96,20 @@ pocket_depth = 1.0; // [0.1:0.1:20]
 pocket_clearance = 0.2; // [0:0.05:2]
 // Alignment pegs that drop into PCB holes: [[x, y, diameter, length], ...]
 pegs = [];
+
+/* [Clamp tab] */
+// Add a flat tab off the body, level with its bottom face, to clamp the jig to the board
+clamp_tab = false;
+// Which side the tab comes off, in the top view
+clamp_tab_side = "right"; // [right:Right, left:Left, top:Top, bottom:Bottom, left_right:Left and right, top_bottom:Top and bottom]
+// How far the tab sticks out from the body (mm)
+clamp_tab_length = 15; // [3:0.5:80]
+// Tab width along the body edge (0 = same as the body)
+clamp_tab_width = 10; // [0:0.5:100]
+// Tab thickness (mm)
+clamp_tab_thickness = 3; // [1:0.1:10]
+// Screw or zip-tie hole through the middle of the tab (0 = none)
+clamp_tab_hole_d = 0; // [0:0.1:10]
 
 /* [Output] */
 // Turn the jig upside down for printing (better with a pocket or pegs)
@@ -171,6 +191,55 @@ function hole_base(x, y) = in_pocket(x, y) ? pocket_depth : 0;
 hole_d = pin_barrel_d + hole_clearance;
 grip_d = pin_barrel_d + grip_clearance;
 stop_h = pin_stop ? stop_len : 0;
+// Uncompressed length of plunger and tip below the barrel.
+free_tip = pin_total_len - pin_barrel_len;
+// Height of the stop ledge above the face a pin exits from. Raising it lets
+// the body sit on the board with the pins pushed in by `preload`.
+standoff = sit_on_board && pin_stop ? max(0, free_tip - stop_h - preload) : 0;
+
+// ------------------------------------------------------------- clamp tab --
+
+function tab_sides() =
+  !clamp_tab ? []
+  : clamp_tab_side == "left_right" ? ["left", "right"]
+  : clamp_tab_side == "top_bottom" ? ["top", "bottom"]
+  : [clamp_tab_side];
+
+// Tab footprint as [x0, y0, x1, y1]. It reaches into the body past the
+// rounded corners so the two fuse.
+function tab_rect(side) = let(
+  L = clamp_tab_length,
+  ov = max(corner_radius, 0.5),
+  wy = clamp_tab_width > 0 ? clamp_tab_width : body_y,
+  wx = clamp_tab_width > 0 ? clamp_tab_width : body_x,
+  x0 = body_cx - body_x / 2, x1 = body_cx + body_x / 2,
+  y0 = body_cy - body_y / 2, y1 = body_cy + body_y / 2
+)
+  side == "left" ? [x0 - L, body_cy - wy / 2, x0 + ov, body_cy + wy / 2]
+  : side == "top" ? [body_cx - wx / 2, y1 - ov, body_cx + wx / 2, y1 + L]
+  : side == "bottom" ? [body_cx - wx / 2, y0 - L, body_cx + wx / 2, y0 + ov]
+  : [x1 - ov, body_cy - wy / 2, x1 + L, body_cy + wy / 2];
+
+// Centre of the part of the tab outside the body, for the screw hole.
+function tab_hole_at(side) = let(r = tab_rect(side))
+  side == "left" ? [(r[0] + body_cx - body_x / 2) / 2, (r[1] + r[3]) / 2]
+  : side == "right" ? [(r[2] + body_cx + body_x / 2) / 2, (r[1] + r[3]) / 2]
+  : side == "top" ? [(r[0] + r[2]) / 2, (r[3] + body_cy + body_y / 2) / 2]
+  : [(r[0] + r[2]) / 2, (r[1] + body_cy - body_y / 2) / 2];
+
+module clamp_tab(side) {
+  r = tab_rect(side);
+  w = r[2] - r[0];
+  h = r[3] - r[1];
+  rr = min(corner_radius, w / 2 - eps, h / 2 - eps);
+  difference() {
+    linear_extrude(min(clamp_tab_thickness, body_height))
+      translate([(r[0] + r[2]) / 2, (r[1] + r[3]) / 2])
+        if (rr > 0) offset(r = rr) square([w - 2 * rr, h - 2 * rr], center = true);
+        else square([w, h], center = true);
+    if (clamp_tab_hole_d > 0) translate([each tab_hole_at(side), -1]) cylinder(d = clamp_tab_hole_d, h = body_height + 2);
+  }
+}
 
 module body_outline() {
   r = min(corner_radius, body_x / 2 - eps, body_y / 2 - eps);
@@ -196,11 +265,15 @@ module pin1_cut() {
 
 module pin_hole(base) {
   top = body_height;
-  grip = max(0, min(grip_len, top - base - stop_h));
+  seat = base + standoff + stop_h;
+  grip = max(0, min(grip_len, top - seat));
+  // Clear channel for the plunger below a raised stop.
+  if (standoff > 0) translate([0, 0, base - 1]) cylinder(d = hole_d, h = 1 + standoff + eps);
   // Stop ledge (or a plain hole when there is no stop).
-  translate([0, 0, base - 1]) cylinder(d = pin_stop ? stop_hole_d : hole_d, h = 1 + stop_h + eps);
+  ledge_z = standoff > 0 ? base + standoff : base - 1;
+  translate([0, 0, ledge_z]) cylinder(d = pin_stop ? stop_hole_d : hole_d, h = seat - ledge_z + eps);
   // Sliding section.
-  translate([0, 0, base + stop_h]) cylinder(d = hole_d, h = top - base - stop_h - grip + eps);
+  translate([0, 0, seat]) cylinder(d = hole_d, h = top - seat - grip + eps);
   // Grip section and entry chamfer.
   if (grip > 0) translate([0, 0, top - grip]) cylinder(d = grip_d, h = grip + 1);
   if (entry_chamfer > 0) {
@@ -221,13 +294,16 @@ module peg(d, l) {
 module jig() {
   difference() {
     union() {
-      linear_extrude(body_height) body_outline();
+      difference() {
+        linear_extrude(body_height) body_outline();
+        if (pin1_marker && len(all_pins) > 0) pin1_cut();
+      }
+      for (side = tab_sides()) clamp_tab(side);
       for (g = pegs) translate([mx * g[0], g[1], 0]) peg(g[2], g[3]);
     }
     for (p = used_pins) translate([p[1], p[2], 0]) pin_hole(hole_base(p[1], p[2]));
     if (pocket) translate([lay_cx - pocket_hx, lay_cy - pocket_hy, -1])
       cube([2 * pocket_hx, 2 * pocket_hy, pocket_depth + 1]);
-    if (pin1_marker && len(all_pins) > 0) pin1_cut();
   }
 }
 
@@ -237,4 +313,5 @@ else jig();
 // Machine-readable summary for the web generator.
 echo("JIG_PINS", all_pins);
 echo("JIG_BODY", [body_cx, body_cy, body_x, body_y, body_height]);
-echo("JIG_HOLE", [hole_d, stop_h, lay_cx, lay_cy, pocket_hx, pocket_hy]);
+echo("JIG_HOLE", [hole_d, stop_h, lay_cx, lay_cy, pocket_hx, pocket_hy, standoff]);
+echo("JIG_TABS", [for (side = tab_sides()) tab_rect(side)]);

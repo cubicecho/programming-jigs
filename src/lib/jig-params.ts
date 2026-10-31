@@ -4,6 +4,7 @@ export { jigSource };
 
 export type Layout = 'grid' | 'dual' | 'quad' | 'custom';
 export type Point = [number, number];
+export type TabSide = 'right' | 'left' | 'top' | 'bottom' | 'left_right' | 'top_bottom';
 /** [x, y, diameter, length] */
 export type Peg = [number, number, number, number];
 
@@ -35,6 +36,9 @@ export interface JigParams {
   stop_hole_d: number;
   entry_chamfer: number;
 
+  sit_on_board: boolean;
+  preload: number;
+
   body_height: number;
   margin: number;
   min_body_x: number;
@@ -48,6 +52,13 @@ export interface JigParams {
   pocket_depth: number;
   pocket_clearance: number;
   pegs: Peg[];
+
+  clamp_tab: boolean;
+  clamp_tab_side: TabSide;
+  clamp_tab_length: number;
+  clamp_tab_width: number;
+  clamp_tab_thickness: number;
+  clamp_tab_hole_d: number;
 
   flip_for_printing: boolean;
 }

@@ -113,7 +113,7 @@ export function Viewer3D({
       for (const pin of info.pins) {
         if (!pin.used) continue;
         const base = inPocket(info, pin.x, pin.y) ? params.pocket_depth : 0;
-        const seat = base + info.stopH;
+        const seat = base + info.standoff + info.stopH;
         c.model.add(cylinder(params.pin_barrel_d, params.pin_barrel_len, BARREL, pin.x, pin.y, seat));
         c.model.add(cylinder(params.pin_barrel_d * 0.6, tipLen, PLUNGER, pin.x, pin.y, seat - tipLen));
       }

@@ -12,12 +12,18 @@ export function Footprint({
   info: JigInfo;
   onTogglePin: (num: number) => void;
 }) {
-  const { body, pins, holeD, pocket } = info;
+  const { body, pins, holeD, pocket, tabs } = info;
   const pad = 2;
-  const x0 = body.cx - body.x / 2 - pad;
-  const y0 = -(body.cy + body.y / 2) - pad;
-  const w = body.x + 2 * pad;
-  const h = body.y + 2 * pad;
+  // Fit the view to the body and any clamp tabs.
+  const rects = [[body.cx - body.x / 2, body.cy - body.y / 2, body.cx + body.x / 2, body.cy + body.y / 2], ...tabs];
+  const minX = Math.min(...rects.map((r) => r[0]));
+  const minY = Math.min(...rects.map((r) => r[1]));
+  const maxX = Math.max(...rects.map((r) => r[2]));
+  const maxY = Math.max(...rects.map((r) => r[3]));
+  const x0 = minX - pad;
+  const y0 = -maxY - pad;
+  const w = maxX - minX + 2 * pad;
+  const h = maxY - minY + 2 * pad;
 
   // Thinnest wall from each pin to its nearest used neighbour, for colouring.
   const walls = useMemo(() => {
@@ -50,6 +56,19 @@ export function Footprint({
         role="img"
         aria-label="Jig footprint, top view"
       >
+        {tabs.map(([tx0, ty0, tx1, ty1]) => (
+          <rect
+            key={`${tx0},${ty0}`}
+            x={tx0}
+            y={-ty1}
+            width={tx1 - tx0}
+            height={ty1 - ty0}
+            rx={Math.min(r, (tx1 - tx0) / 2, (ty1 - ty0) / 2)}
+            className="fill-muted/60 stroke-border"
+            strokeWidth={0.08}
+          />
+        ))}
+        {params.clamp_tab && params.clamp_tab_hole_d > 0 && <TabHoles info={info} d={params.clamp_tab_hole_d} />}
         <rect
           x={body.cx - body.x / 2}
           y={-(body.cy + body.y / 2)}
@@ -138,6 +157,31 @@ export function Footprint({
       </div>
     </div>
   );
+}
+
+/** Mirrors tab_hole_at() in jig.scad: each hole sits in the middle of the part of the tab outside the body. */
+function TabHoles({ info, d }: { info: JigInfo; d: number }) {
+  const { body } = info;
+  const bx0 = body.cx - body.x / 2;
+  const bx1 = body.cx + body.x / 2;
+  const by0 = body.cy - body.y / 2;
+  const by1 = body.cy + body.y / 2;
+  return info.tabs.map(([x0, y0, x1, y1]) => {
+    // Left/right tabs stick out in X; top/bottom tabs stick out in Y.
+    const sideways = x1 > bx1 + 0.5 || x0 < bx0 - 0.5;
+    const cx = !sideways ? (x0 + x1) / 2 : x1 > bx1 + 0.5 ? (x1 + bx1) / 2 : (x0 + bx0) / 2;
+    const cy = sideways ? (y0 + y1) / 2 : y1 > by1 + 0.5 ? (y1 + by1) / 2 : (y0 + by0) / 2;
+    return (
+      <circle
+        key={`${x0},${y0}`}
+        cx={cx}
+        cy={-cy}
+        r={d / 2}
+        className="fill-background stroke-border"
+        strokeWidth={0.08}
+      />
+    );
+  });
 }
 
 /** Mirrors pin1_cut() in jig.scad: the body corner nearest pin 1 is chamfered. */
